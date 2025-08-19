@@ -243,18 +243,47 @@
                 const matrix = math.matrix(matrixData);
                 const result = math.eigs(matrix);
 
-                const eigenvaluesHTML = result.values.toArray().map((v, i) => 
-                    `&lambda;<sub>${i + 1}</sub> = ${math.format(v, { precision: 4 })}`
-                ).join('<br>');
+                const eigenvalues = result.values.toArray();
+                const eigenvectorsMatrix = result.vectors;
+                const vectorSize = eigenvectorsMatrix.size()[0];
+                const numVectors = eigenvectorsMatrix.size()[1];
+                
+                let resultsHTML = '<h3 class="text-2xl font-bold mb-4">Eigenvalues and Eigenvectors:</h3>';
+                resultsHTML += '<div class="flex flex-wrap justify-center gap-8">';
 
-                const eigenvectorsHTML = formatMatrixForDisplay(result.vectors);
+                const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+                const lcm = (a, b) => Math.abs(a * b) / gcd(a, b);
 
-                calculatorResults.innerHTML = `
-                    <p class="mb-2">Eigenvalues:</p>
-                    <div class="input-dark p-3 rounded-md mb-4">${eigenvaluesHTML}</div>
-                    <p class="mb-2">Eigenvectors (as columns):</p>
-                    ${eigenvectorsHTML}
-                `;
+                for (let j = 0; j < numVectors; j++) {
+                    const vector = eigenvectorsMatrix.subset(math.index(math.range(0, vectorSize), j));
+                    const vectorArray = vector.toArray().flat();
+
+                    // --- NEW INTEGER SCALING LOGIC ---
+                    let firstNonZero = vectorArray.find(v => math.abs(v) > 1e-9);
+                    if (firstNonZero === undefined) firstNonZero = 1;
+
+                    const normalizedVector = vectorArray.map(v => v / firstNonZero);
+                    const fractions = normalizedVector.map(v => math.fraction(v));
+                    const denominators = fractions.map(f => f.d);
+                    const commonMultiple = denominators.reduce(lcm, 1);
+                    const integerVector = normalizedVector.map(v => math.round(v * commonMultiple));
+                    
+                    const finalVectorForDisplay = math.matrix(integerVector.map(v => [v]));
+                    const vectorHTML = formatMatrixForDisplay(finalVectorForDisplay);
+                    // --- END OF NEW LOGIC ---
+                    
+                    resultsHTML += `
+                        <div class="text-center">
+                            <p class="mb-2">&lambda;<sub>${j + 1}</sub> = ${math.format(eigenvalues[j], { precision: 4 })}</p>
+                            <div class="flex items-center justify-center">
+                                <p class="mr-2">x<sub>${j + 1}</sub> = </p>
+                                ${vectorHTML}
+                            </div>
+                        </div>
+                    `;
+                }
+                resultsHTML += '</div>';
+                calculatorResults.innerHTML = resultsHTML;
 
             } catch (error) {
                 calculatorResults.innerHTML = `<p class="text-red-400">Error: ${error.message}</p>`;
@@ -332,57 +361,58 @@
                     throw new Error("Please select a valid matrix size of 2 or greater.");
                 }
 
-                // --- Generate a problem with guaranteed integer eigenvalues for ANY size ---
-                // 1. Create 'size' distinct integer eigenvalues
                 let lambdas = [];
                 while(lambdas.length < size) {
-                    let randInt = math.floor(math.random() * 11) - 5; // Integers from -5 to 5
+                    let randInt = math.floor(math.random() * 11) - 5;
                     if (!lambdas.includes(randInt)) {
                         lambdas.push(randInt);
                     }
                 }
                 
-                // 2. Create an invertible integer matrix P with det(P) = 1
-                // An upper triangular matrix with 1s on the diagonal is a simple way to do this.
                 let pArray = [];
                 for (let i = 0; i < size; i++) {
                     let row = [];
                     for (let j = 0; j < size; j++) {
-                        if (i === j) {
-                            row.push(1); // Diagonal elements are 1
-                        } else if (j > i) {
-                            row.push(math.floor(math.random() * 5) - 2); // Small random integers above the diagonal
-                        } else {
-                            row.push(0); // Zeros below the diagonal
-                        }
+                        if (i === j) row.push(1);
+                        else if (j > i) row.push(math.floor(math.random() * 5) - 2);
+                        else row.push(0);
                     }
                     pArray.push(row);
                 }
                 const P_int = math.matrix(pArray);
 
-                // 3. Construct the problem matrix A = P * D * P^-1
                 const D = math.diag(lambdas);
                 const P_inv = math.inv(P_int);
                 const problemMatrix = math.multiply(P_int, D, P_inv);
                 
-                // The solution is the values we started with
                 const solutionEigenvalues = lambdas;
                 const solutionEigenvectors = P_int;
 
                 const matrixHTML = formatMatrixForDisplay(problemMatrix);
-                const eigenvaluesHTML = solutionEigenvalues.map((v, i) => 
-                    `&lambda;<sub>${i + 1}</sub> = ${math.format(v, { precision: 4 })}`
-                ).join('<br>');
-                const eigenvectorsHTML = formatMatrixForDisplay(solutionEigenvectors);
+                
+                let solutionHTML = '<div class="flex flex-wrap justify-center gap-8">';
+                const eigenvectorsArray = solutionEigenvectors.toArray();
+
+                for (let j = 0; j < size; j++) {
+                    const columnVector = eigenvectorsArray.map(row => [row[j]]);
+                    const vectorHTML = formatMatrixForDisplay(columnVector);
+                    solutionHTML += `
+                        <div class="text-center">
+                            <p class="mb-2">&lambda;<sub>${j + 1}</sub> = ${math.format(solutionEigenvalues[j], { precision: 4 })}</p>
+                            <div class="flex items-center justify-center">
+                                <p class="mr-2">x<sub>${j + 1}</sub> = </p>
+                                ${vectorHTML}
+                            </div>
+                        </div>
+                    `;
+                }
+                solutionHTML += '</div>';
 
                 practiceResults.innerHTML = `
                     <h3 class="text-2xl font-bold mb-4">Generated Matrix:</h3>
                     <div class="flex justify-center">${matrixHTML}</div>
                     <h3 class="text-2xl font-bold mt-6 mb-4">Solution:</h3>
-                    <p class="mb-2">Eigenvalues:</p>
-                    <div class="input-dark p-3 rounded-md mb-4">${eigenvaluesHTML}</div>
-                    <p class="mb-2">Eigenvectors (as columns):</p>
-                    <div class="flex justify-center">${eigenvectorsHTML}</div>
+                    ${solutionHTML}
                 `;
 
             } catch (error) {
