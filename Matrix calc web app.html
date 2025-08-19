@@ -14,7 +14,7 @@
         }
         .btn {
             background-color: #333333;
-            color: #ffffff; /* Changed text color to white */
+            color: #ffffff; /* White text */
             font-weight: bold;
             padding: 1rem 2rem;
             border-radius: 0.5rem;
@@ -90,7 +90,7 @@
             </div>
 
             <div class="mb-6">
-                <label for="eigenvectors-input" class="block text-lg mb-2">Eigenvectors (enter as columns, separated by spaces/newlines):</label>
+                <label for="eigenvectors-input" class="block text-lg mb-2">Eigenvectors (Optional - enter as columns):</label>
                 <textarea id="eigenvectors-input" rows="6" class="input-dark w-full p-3 rounded-md" placeholder="Example for a 2x2 matrix:&#10;1 0.5&#10;0.5 1"></textarea>
             </div>
 
@@ -99,7 +99,7 @@
             </div>
 
             <div class="mt-8">
-                <h3 class="text-2xl font-bold mb-4">Generated Matrix (A = PDP⁻¹):</h3>
+                <h3 id="generator-title" class="text-2xl font-bold mb-4">Generated Matrix:</h3>
                 <pre id="generator-results" class="input-dark p-4 rounded-md whitespace-pre-wrap text-lg"></pre>
             </div>
         </div>
@@ -107,6 +107,18 @@
     </div>
 
     <script>
+        // --- Helper function for formatting ---
+        function formatMatrixForDisplay(matrix) {
+            const array = typeof matrix.toArray === 'function' ? matrix.toArray() : matrix;
+            
+            if (!Array.isArray(array[0])) {
+                return `[ ${array.map(v => math.format(v, {precision: 4})).join(', ')} ]`;
+            }
+            return array.map(row => 
+                `[ ${row.map(val => math.format(val, { precision: 4 })).join(',\t')} ]`
+            ).join('\n');
+        }
+
         // --- Navigation ---
         const views = ['start-menu', 'calculator-view', 'generator-view'];
         function showView(viewId) {
@@ -162,9 +174,8 @@
                 const matrix = math.matrix(matrixData);
                 const result = math.eigs(matrix);
 
-                // Format results
-                const eigenvalues = result.values.map(v => math.format(v, { precision: 4 })).join(', ');
-                const eigenvectors = math.format(result.vectors, { precision: 4 });
+                const eigenvalues = result.values.toArray().map(v => math.format(v, { precision: 4 })).join(', ');
+                const eigenvectors = formatMatrixForDisplay(result.vectors);
 
                 calculatorResults.textContent = `Eigenvalues:\n[${eigenvalues}]\n\nEigenvectors (as columns):\n${eigenvectors}`;
 
@@ -178,32 +189,64 @@
         const eigenvectorsInput = document.getElementById('eigenvectors-input');
         const generateBtn = document.getElementById('generate-btn');
         const generatorResults = document.getElementById('generator-results');
+        const generatorTitle = document.getElementById('generator-title');
 
         generateBtn.addEventListener('click', () => {
             try {
                 // 1. Parse Eigenvalues
                 const eigenvalStr = eigenvaluesInput.value.trim();
                 if (!eigenvalStr) throw new Error("Eigenvalues input is empty.");
-                const eigenvalues = eigenvalStr.split(',').map(v => parseFloat(v.trim()));
-
-                // 2. Parse Eigenvectors
-                const evecStr = eigenvectorsInput.value.trim();
-                if (!evecStr) throw new Error("Eigenvectors input is empty.");
-                const rows = evecStr.split('\n').map(line => line.trim().split(/\s+/).map(num => parseFloat(num)));
-                const P = math.transpose(math.matrix(rows)); // Transpose because input is row-based
-
-                // 3. Validate
+                const eigenvalues = eigenvalStr.split(',').map(v => {
+                    const num = parseFloat(v.trim());
+                    if (isNaN(num)) throw new Error("Invalid number in eigenvalues.");
+                    return num;
+                });
                 const n = eigenvalues.length;
-                if (math.size(P)[0] !== n || math.size(P)[1] !== n) {
-                    throw new Error(`Dimension Mismatch: You entered ${n} eigenvalues, but the eigenvector matrix is not ${n}x${n}.`);
+
+                // 2. Check for and Parse Eigenvectors
+                const evecStr = eigenvectorsInput.value.trim();
+                let generatedMatrix;
+
+                const rows = evecStr.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line && !line.toLowerCase().includes('example'))
+                    .map(line => {
+                        const stringValues = line.replace(/,/g, ' ').split(/\s+/).filter(s => s.length > 0);
+                        return stringValues.map(numStr => {
+                            const num = parseFloat(numStr);
+                            if (isNaN(num)) throw new Error(`Invalid non-numeric value "${numStr}" found in eigenvectors.`);
+                            return num;
+                        });
+                    })
+                    .filter(row => row.length > 0);
+
+                if (evecStr && rows.length > 0) {
+                    // --- Full Matrix Generation (if eigenvectors are provided) ---
+                    
+                    // FIXED: New, more robust validation logic
+                    if (rows.length !== n) {
+                        throw new Error(`Dimension Mismatch: You entered ${n} eigenvalues, but provided ${rows.length} rows for the eigenvector matrix.`);
+                    }
+                    for(const row of rows) {
+                        if (row.length !== n) {
+                             throw new Error(`Dimension Mismatch: The eigenvector matrix must be square. One of your rows does not have ${n} columns.`);
+                        }
+                    }
+
+                    generatorTitle.textContent = "Generated Matrix (A = PDP⁻¹):";
+                    const P = math.transpose(math.matrix(rows));
+
+                    const D = math.diag(eigenvalues);
+                    const P_inv = math.inv(P);
+                    generatedMatrix = math.multiply(P, D, P_inv);
+
+                } else {
+                    // --- Diagonal Matrix Generation (if eigenvectors are blank) ---
+                    generatorTitle.textContent = "Generated Diagonal Matrix:";
+                    generatedMatrix = math.diag(eigenvalues);
                 }
 
-                // 4. Calculate A = PDP⁻¹
-                const D = math.diag(eigenvalues);
-                const P_inv = math.inv(P);
-                const generatedMatrix = math.multiply(P, D, P_inv);
-
-                generatorResults.textContent = math.format(generatedMatrix, { precision: 4 });
+                generatorResults.textContent = formatMatrixForDisplay(generatedMatrix);
 
             } catch (error) {
                 generatorResults.textContent = `Error: ${error.message}`;
@@ -212,7 +255,7 @@
 
 
         // --- Initial Setup ---
-        createMatrixGrid(); // Initialize the calculator grid
+        createMatrixGrid();
     </script>
 
 </body>
