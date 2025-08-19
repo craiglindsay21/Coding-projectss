@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Tools</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js"></script>
+    <style>
+        body {
+            font-family: 'Helvetica', sans-serif;
+            background-color: #1c1c1c;
+            color: #ffffff;
+        }
+        .btn {
+            background-color: #333333;
+            color: #ffffff; /* Changed text color to white */
+            font-weight: bold;
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            border: 2px solid #555555;
+            transition: background-color 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background-color: #555555;
+        }
+        .input-dark {
+            background-color: #2b2b2b;
+            color: #ffffff;
+            border: 1px solid #444444;
+        }
+        .input-dark::placeholder {
+            color: #888888;
+        }
+        .input-dark:focus {
+            outline: none;
+            border-color: #6a6a6a;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div id="app-container" class="w-full max-w-4xl mx-auto p-4 md:p-8">
+
+        <!-- Start Menu -->
+        <div id="start-menu" class="text-center">
+            <h1 class="text-5xl md:text-6xl font-bold mb-12">Matrix Tools</h1>
+            <div class="space-y-6">
+                <button id="show-calculator-btn" class="btn text-xl w-full md:w-96">Eigenvalue Calculator</button>
+                <button id="show-generator-btn" class="btn text-xl w-full md:w-96">Matrix Generator</button>
+            </div>
+        </div>
+
+        <!-- Eigenvalue Calculator -->
+        <div id="calculator-view" class="hidden">
+            <button class="btn mb-8" onclick="showView('start-menu')">← Back to Menu</button>
+            <h2 class="text-4xl font-bold text-center mb-8">Eigenvalue Calculator</h2>
+            
+            <div class="flex items-center space-x-4 mb-6">
+                <label for="matrix-size" class="text-lg">Matrix Size (N x N):</label>
+                <input type="number" id="matrix-size" min="1" max="10" value="2" class="input-dark w-20 p-2 rounded-md text-center">
+            </div>
+
+            <div id="matrix-input-grid" class="grid grid-cols-2 gap-4 mb-6" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+                <!-- Matrix input cells will be generated here by JS -->
+            </div>
+
+            <div class="text-center">
+                <button id="calculate-btn" class="btn text-lg">Calculate</button>
+            </div>
+
+            <div class="mt-8">
+                <h3 class="text-2xl font-bold mb-4">Results:</h3>
+                <pre id="calculator-results" class="input-dark p-4 rounded-md whitespace-pre-wrap text-lg"></pre>
+            </div>
+        </div>
+
+        <!-- Matrix Generator -->
+        <div id="generator-view" class="hidden">
+            <button class="btn mb-8" onclick="showView('start-menu')">← Back to Menu</button>
+            <h2 class="text-4xl font-bold text-center mb-8">Matrix Generator</h2>
+            
+            <div class="mb-6">
+                <label for="eigenvalues-input" class="block text-lg mb-2">Eigenvalues (comma-separated):</label>
+                <input type="text" id="eigenvalues-input" class="input-dark w-full p-3 rounded-md" placeholder="e.g., 5, -1">
+            </div>
+
+            <div class="mb-6">
+                <label for="eigenvectors-input" class="block text-lg mb-2">Eigenvectors (enter as columns, separated by spaces/newlines):</label>
+                <textarea id="eigenvectors-input" rows="6" class="input-dark w-full p-3 rounded-md" placeholder="Example for a 2x2 matrix:&#10;1 0.5&#10;0.5 1"></textarea>
+            </div>
+
+            <div class="text-center">
+                <button id="generate-btn" class="btn text-lg">Generate Matrix</button>
+            </div>
+
+            <div class="mt-8">
+                <h3 class="text-2xl font-bold mb-4">Generated Matrix (A = PDP⁻¹):</h3>
+                <pre id="generator-results" class="input-dark p-4 rounded-md whitespace-pre-wrap text-lg"></pre>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Navigation ---
+        const views = ['start-menu', 'calculator-view', 'generator-view'];
+        function showView(viewId) {
+            views.forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+        }
+
+        document.getElementById('show-calculator-btn').addEventListener('click', () => showView('calculator-view'));
+        document.getElementById('show-generator-btn').addEventListener('click', () => showView('generator-view'));
+
+        // --- Eigenvalue Calculator Logic ---
+        const matrixSizeInput = document.getElementById('matrix-size');
+        const matrixGrid = document.getElementById('matrix-input-grid');
+        const calculateBtn = document.getElementById('calculate-btn');
+        const calculatorResults = document.getElementById('calculator-results');
+
+        function createMatrixGrid() {
+            const size = parseInt(matrixSizeInput.value) || 2;
+            matrixGrid.innerHTML = '';
+            matrixGrid.style.gridTemplateColumns = `repeat(${size}, minmax(0, 1fr))`;
+            for (let i = 0; i < size * size; i++) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'input-dark p-2 w-full text-center rounded-md text-lg';
+                matrixGrid.appendChild(input);
+            }
+        }
+
+        matrixSizeInput.addEventListener('input', createMatrixGrid);
+
+        calculateBtn.addEventListener('click', () => {
+            const size = parseInt(matrixSizeInput.value);
+            const inputs = matrixGrid.getElementsByTagName('input');
+            const matrixData = [];
+            
+            try {
+                let row = [];
+                for (let i = 0; i < inputs.length; i++) {
+                    const val = inputs[i].value.trim();
+                    if (val === '') {
+                        alert('Please fill all matrix cells.');
+                        return;
+                    }
+                    row.push(parseFloat(val));
+                    if ((i + 1) % size === 0) {
+                        matrixData.push(row);
+                        row = [];
+                    }
+                }
+                
+                const matrix = math.matrix(matrixData);
+                const result = math.eigs(matrix);
+
+                // Format results
+                const eigenvalues = result.values.map(v => math.format(v, { precision: 4 })).join(', ');
+                const eigenvectors = math.format(result.vectors, { precision: 4 });
+
+                calculatorResults.textContent = `Eigenvalues:\n[${eigenvalues}]\n\nEigenvectors (as columns):\n${eigenvectors}`;
+
+            } catch (error) {
+                calculatorResults.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        // --- Matrix Generator Logic ---
+        const eigenvaluesInput = document.getElementById('eigenvalues-input');
+        const eigenvectorsInput = document.getElementById('eigenvectors-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const generatorResults = document.getElementById('generator-results');
+
+        generateBtn.addEventListener('click', () => {
+            try {
+                // 1. Parse Eigenvalues
+                const eigenvalStr = eigenvaluesInput.value.trim();
+                if (!eigenvalStr) throw new Error("Eigenvalues input is empty.");
+                const eigenvalues = eigenvalStr.split(',').map(v => parseFloat(v.trim()));
+
+                // 2. Parse Eigenvectors
+                const evecStr = eigenvectorsInput.value.trim();
+                if (!evecStr) throw new Error("Eigenvectors input is empty.");
+                const rows = evecStr.split('\n').map(line => line.trim().split(/\s+/).map(num => parseFloat(num)));
+                const P = math.transpose(math.matrix(rows)); // Transpose because input is row-based
+
+                // 3. Validate
+                const n = eigenvalues.length;
+                if (math.size(P)[0] !== n || math.size(P)[1] !== n) {
+                    throw new Error(`Dimension Mismatch: You entered ${n} eigenvalues, but the eigenvector matrix is not ${n}x${n}.`);
+                }
+
+                // 4. Calculate A = PDP⁻¹
+                const D = math.diag(eigenvalues);
+                const P_inv = math.inv(P);
+                const generatedMatrix = math.multiply(P, D, P_inv);
+
+                generatorResults.textContent = math.format(generatedMatrix, { precision: 4 });
+
+            } catch (error) {
+                generatorResults.textContent = `Error: ${error.message}`;
+            }
+        });
+
+
+        // --- Initial Setup ---
+        createMatrixGrid(); // Initialize the calculator grid
+    </script>
+
+</body>
+</html>
