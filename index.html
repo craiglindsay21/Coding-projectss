@@ -40,6 +40,44 @@
         .hidden {
             display: none;
         }
+        /* New styles for matrix display */
+        .matrix-container {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 0 1em;
+            margin: 0.5em 0;
+        }
+        .matrix-container::before,
+        .matrix-container::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 10px;
+            border-color: #ffffff;
+            border-style: solid;
+        }
+        .matrix-container::before {
+            left: 0;
+            border-width: 3px 0 3px 3px;
+            border-radius: 10px 0 0 10px;
+        }
+        .matrix-container::after {
+            right: 0;
+            border-width: 3px 3px 3px 0;
+            border-radius: 0 10px 10px 0;
+        }
+        .matrix-table {
+            border-collapse: collapse;
+            margin: 0 0.5em;
+        }
+        .matrix-table td {
+            padding: 0.5em 1em;
+            text-align: center;
+            font-size: 1.25rem;
+        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen">
@@ -52,6 +90,7 @@
             <div class="space-y-6">
                 <button id="show-calculator-btn" class="btn text-xl w-full md:w-96">Eigenvalue Calculator</button>
                 <button id="show-generator-btn" class="btn text-xl w-full md:w-96">Matrix Generator</button>
+                <button id="show-practice-btn" class="btn text-xl w-full md:w-96">Random Practice Problem</button>
             </div>
         </div>
 
@@ -75,7 +114,7 @@
 
             <div class="mt-8">
                 <h3 class="text-2xl font-bold mb-4">Results:</h3>
-                <pre id="calculator-results" class="input-dark p-4 rounded-md whitespace-pre-wrap text-lg"></pre>
+                <div id="calculator-results" class="text-lg"></div>
             </div>
         </div>
 
@@ -100,8 +139,25 @@
 
             <div class="mt-8">
                 <h3 id="generator-title" class="text-2xl font-bold mb-4">Generated Matrix:</h3>
-                <pre id="generator-results" class="input-dark p-4 rounded-md whitespace-pre-wrap text-lg"></pre>
+                <div id="generator-results"></div>
             </div>
+        </div>
+        
+        <!-- Random Practice Problem -->
+        <div id="practice-view" class="hidden">
+            <button class="btn mb-8" onclick="showView('start-menu')">← Back to Menu</button>
+            <h2 class="text-4xl font-bold text-center mb-8">Random Practice Problem</h2>
+            
+            <div class="flex items-center space-x-4 mb-6 justify-center">
+                <label for="practice-size" class="text-lg">Matrix Size (N x N):</label>
+                <input type="number" id="practice-size" min="2" max="8" value="3" class="input-dark w-20 p-2 rounded-md text-center">
+            </div>
+
+            <div class="text-center">
+                <button id="generate-practice-btn" class="btn text-lg">Generate Problem</button>
+            </div>
+
+            <div id="practice-results" class="mt-8 text-lg"></div>
         </div>
 
     </div>
@@ -111,16 +167,28 @@
         function formatMatrixForDisplay(matrix) {
             const array = typeof matrix.toArray === 'function' ? matrix.toArray() : matrix;
             
-            if (!Array.isArray(array[0])) {
-                return `[ ${array.map(v => math.format(v, {precision: 4})).join(', ')} ]`;
+            let tableHTML = '<table class="matrix-table">';
+            if (!Array.isArray(array[0])) { // It's a vector
+                tableHTML += '<tr>';
+                array.forEach(val => {
+                    tableHTML += `<td>${math.format(val, { precision: 4 })}</td>`;
+                });
+                tableHTML += '</tr>';
+            } else { // It's a 2D matrix
+                array.forEach(row => {
+                    tableHTML += '<tr>';
+                    row.forEach(val => {
+                        tableHTML += `<td>${math.format(val, { precision: 4 })}</td>`;
+                    });
+                    tableHTML += '</tr>';
+                });
             }
-            return array.map(row => 
-                `[ ${row.map(val => math.format(val, { precision: 4 })).join(',\t')} ]`
-            ).join('\n');
+            tableHTML += '</table>';
+            return `<div class="matrix-container">${tableHTML}</div>`;
         }
 
         // --- Navigation ---
-        const views = ['start-menu', 'calculator-view', 'generator-view'];
+        const views = ['start-menu', 'calculator-view', 'generator-view', 'practice-view'];
         function showView(viewId) {
             views.forEach(id => {
                 document.getElementById(id).classList.add('hidden');
@@ -130,6 +198,7 @@
 
         document.getElementById('show-calculator-btn').addEventListener('click', () => showView('calculator-view'));
         document.getElementById('show-generator-btn').addEventListener('click', () => showView('generator-view'));
+        document.getElementById('show-practice-btn').addEventListener('click', () => showView('practice-view'));
 
         // --- Eigenvalue Calculator Logic ---
         const matrixSizeInput = document.getElementById('matrix-size');
@@ -174,13 +243,21 @@
                 const matrix = math.matrix(matrixData);
                 const result = math.eigs(matrix);
 
-                const eigenvalues = result.values.toArray().map(v => math.format(v, { precision: 4 })).join(', ');
-                const eigenvectors = formatMatrixForDisplay(result.vectors);
+                const eigenvaluesHTML = result.values.toArray().map((v, i) => 
+                    `&lambda;<sub>${i + 1}</sub> = ${math.format(v, { precision: 4 })}`
+                ).join('<br>');
 
-                calculatorResults.textContent = `Eigenvalues:\n[${eigenvalues}]\n\nEigenvectors (as columns):\n${eigenvectors}`;
+                const eigenvectorsHTML = formatMatrixForDisplay(result.vectors);
+
+                calculatorResults.innerHTML = `
+                    <p class="mb-2">Eigenvalues:</p>
+                    <div class="input-dark p-3 rounded-md mb-4">${eigenvaluesHTML}</div>
+                    <p class="mb-2">Eigenvectors (as columns):</p>
+                    ${eigenvectorsHTML}
+                `;
 
             } catch (error) {
-                calculatorResults.textContent = `Error: ${error.message}`;
+                calculatorResults.innerHTML = `<p class="text-red-400">Error: ${error.message}</p>`;
             }
         });
         
@@ -193,7 +270,6 @@
 
         generateBtn.addEventListener('click', () => {
             try {
-                // 1. Parse Eigenvalues
                 const eigenvalStr = eigenvaluesInput.value.trim();
                 if (!eigenvalStr) throw new Error("Eigenvalues input is empty.");
                 const eigenvalues = eigenvalStr.split(',').map(v => {
@@ -203,7 +279,6 @@
                 });
                 const n = eigenvalues.length;
 
-                // 2. Check for and Parse Eigenvectors
                 const evecStr = eigenvectorsInput.value.trim();
                 let generatedMatrix;
 
@@ -221,9 +296,6 @@
                     .filter(row => row.length > 0);
 
                 if (evecStr && rows.length > 0) {
-                    // --- Full Matrix Generation (if eigenvectors are provided) ---
-                    
-                    // FIXED: New, more robust validation logic
                     if (rows.length !== n) {
                         throw new Error(`Dimension Mismatch: You entered ${n} eigenvalues, but provided ${rows.length} rows for the eigenvector matrix.`);
                     }
@@ -235,24 +307,88 @@
 
                     generatorTitle.textContent = "Generated Matrix (A = PDP⁻¹):";
                     const P = math.transpose(math.matrix(rows));
-
                     const D = math.diag(eigenvalues);
                     const P_inv = math.inv(P);
                     generatedMatrix = math.multiply(P, D, P_inv);
-
                 } else {
-                    // --- Diagonal Matrix Generation (if eigenvectors are blank) ---
                     generatorTitle.textContent = "Generated Diagonal Matrix:";
                     generatedMatrix = math.diag(eigenvalues);
                 }
-
-                generatorResults.textContent = formatMatrixForDisplay(generatedMatrix);
-
+                generatorResults.innerHTML = formatMatrixForDisplay(generatedMatrix);
             } catch (error) {
-                generatorResults.textContent = `Error: ${error.message}`;
+                generatorResults.innerHTML = `<p class="text-red-400">Error: ${error.message}</p>`;
             }
         });
 
+        // --- Random Practice Problem Logic ---
+        const practiceSizeInput = document.getElementById('practice-size');
+        const generatePracticeBtn = document.getElementById('generate-practice-btn');
+        const practiceResults = document.getElementById('practice-results');
+
+        generatePracticeBtn.addEventListener('click', () => {
+            try {
+                const size = parseInt(practiceSizeInput.value);
+                if (isNaN(size) || size < 2) {
+                    throw new Error("Please select a valid matrix size of 2 or greater.");
+                }
+
+                // --- Generate a problem with guaranteed integer eigenvalues for ANY size ---
+                // 1. Create 'size' distinct integer eigenvalues
+                let lambdas = [];
+                while(lambdas.length < size) {
+                    let randInt = math.floor(math.random() * 11) - 5; // Integers from -5 to 5
+                    if (!lambdas.includes(randInt)) {
+                        lambdas.push(randInt);
+                    }
+                }
+                
+                // 2. Create an invertible integer matrix P with det(P) = 1
+                // An upper triangular matrix with 1s on the diagonal is a simple way to do this.
+                let pArray = [];
+                for (let i = 0; i < size; i++) {
+                    let row = [];
+                    for (let j = 0; j < size; j++) {
+                        if (i === j) {
+                            row.push(1); // Diagonal elements are 1
+                        } else if (j > i) {
+                            row.push(math.floor(math.random() * 5) - 2); // Small random integers above the diagonal
+                        } else {
+                            row.push(0); // Zeros below the diagonal
+                        }
+                    }
+                    pArray.push(row);
+                }
+                const P_int = math.matrix(pArray);
+
+                // 3. Construct the problem matrix A = P * D * P^-1
+                const D = math.diag(lambdas);
+                const P_inv = math.inv(P_int);
+                const problemMatrix = math.multiply(P_int, D, P_inv);
+                
+                // The solution is the values we started with
+                const solutionEigenvalues = lambdas;
+                const solutionEigenvectors = P_int;
+
+                const matrixHTML = formatMatrixForDisplay(problemMatrix);
+                const eigenvaluesHTML = solutionEigenvalues.map((v, i) => 
+                    `&lambda;<sub>${i + 1}</sub> = ${math.format(v, { precision: 4 })}`
+                ).join('<br>');
+                const eigenvectorsHTML = formatMatrixForDisplay(solutionEigenvectors);
+
+                practiceResults.innerHTML = `
+                    <h3 class="text-2xl font-bold mb-4">Generated Matrix:</h3>
+                    <div class="flex justify-center">${matrixHTML}</div>
+                    <h3 class="text-2xl font-bold mt-6 mb-4">Solution:</h3>
+                    <p class="mb-2">Eigenvalues:</p>
+                    <div class="input-dark p-3 rounded-md mb-4">${eigenvaluesHTML}</div>
+                    <p class="mb-2">Eigenvectors (as columns):</p>
+                    <div class="flex justify-center">${eigenvectorsHTML}</div>
+                `;
+
+            } catch (error) {
+                practiceResults.innerHTML = `<p class="text-red-400 text-center">Error: ${error.message}</p>`;
+            }
+        });
 
         // --- Initial Setup ---
         createMatrixGrid();
