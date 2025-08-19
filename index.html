@@ -257,20 +257,50 @@
                 for (let j = 0; j < numVectors; j++) {
                     const vector = eigenvectorsMatrix.subset(math.index(math.range(0, vectorSize), j));
                     const vectorArray = vector.toArray().flat();
-
-                    // --- NEW INTEGER SCALING LOGIC ---
-                    let firstNonZero = vectorArray.find(v => math.abs(v) > 1e-9);
-                    if (firstNonZero === undefined) firstNonZero = 1;
-
-                    const normalizedVector = vectorArray.map(v => v / firstNonZero);
-                    const fractions = normalizedVector.map(v => math.fraction(v));
-                    const denominators = fractions.map(f => f.d);
-                    const commonMultiple = denominators.reduce(lcm, 1);
-                    const integerVector = normalizedVector.map(v => math.round(v * commonMultiple));
                     
-                    const finalVectorForDisplay = math.matrix(integerVector.map(v => [v]));
-                    const vectorHTML = formatMatrixForDisplay(finalVectorForDisplay);
+                    let finalVectorForDisplay;
+
+                    // --- NEW CONDITIONAL INTEGER SCALING LOGIC ---
+                    let firstNonZero = vectorArray.find(v => math.abs(v) > 1e-9) || 1;
+                    const normalizedVector = vectorArray.map(v => v / firstNonZero);
+                    
+                    let fractions;
+                    try {
+                        fractions = normalizedVector.map(v => math.fraction(v));
+                    } catch (e) {
+                        fractions = null; // Cannot be represented as clean fractions
+                    }
+
+                    const MAX_DENOMINATOR = 10000; // Avoid huge numbers from floating point errors
+                    if (fractions && fractions.every(f => f.d < MAX_DENOMINATOR)) {
+                        const denominators = fractions.map(f => f.d);
+                        const commonMultiple = denominators.reduce(lcm, 1);
+                        const potentialIntegerVector = normalizedVector.map(v => v * commonMultiple);
+                        
+                        // Check if all elements are very close to integers
+                        const isIntegerVector = potentialIntegerVector.every(v => math.abs(v - math.round(v)) < 1e-9);
+
+                        if (isIntegerVector) {
+                            finalVectorForDisplay = math.matrix(potentialIntegerVector.map(v => [math.round(v)]));
+                        }
+                    }
+                    
+                    // If integer scaling failed or wasn't possible, use the fallback
+                    if (!finalVectorForDisplay) {
+                        let maxAbsVal = 0;
+                        let divisor = 1;
+                        for (const val of vectorArray) {
+                            if (math.abs(val) > maxAbsVal) {
+                                maxAbsVal = math.abs(val);
+                                divisor = val;
+                            }
+                        }
+                        if (math.abs(divisor) < 1e-9) divisor = 1;
+                        finalVectorForDisplay = vector.map(val => [val / divisor]);
+                    }
                     // --- END OF NEW LOGIC ---
+
+                    const vectorHTML = formatMatrixForDisplay(finalVectorForDisplay);
                     
                     resultsHTML += `
                         <div class="text-center">
